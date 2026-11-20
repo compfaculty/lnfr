@@ -50,6 +50,9 @@ In the viewer, use **↑/↓** to select a flow or evidence row and **Tab** or
 diagnoses and their evidence IDs, and **c** shows coverage, gaps, and blind
 spots. Use the arrow keys to scroll the detail pane.
 
+The **Flow** column shows the numeric part of the ID. The evidence timeline
+heading shows the full ID, such as `flow-360`, for use with `lnfr explain`.
+
 In live and saved views, **First UTC** shows the estimated time of the
 earliest socket event currently recorded for each flow. A leading `~` marks
 the estimate, and a blank cell means the event has no calibrated wall time.

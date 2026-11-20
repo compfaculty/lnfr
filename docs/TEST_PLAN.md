@@ -201,7 +201,8 @@ selection, and detail views without privileges.
 Compare **First UTC** with the earliest socket event's `estimated_wall_ns`
 converted to UTC and truncated to seconds. Check the flow table in both a
 wide and a narrow terminal. A replay of a saved TCP retransmit capture from
-`kali-z570` showed `flow-2` with `~01:55:44` at both 126×36 and 78×36.
+`kali-z570` showed **Flow** `2` with `~01:55:44` at both 126×36 and 78×36.
+The evidence timeline heading showed the full ID `flow-2`.
 The column looks up timestamps only for visible flow rows.
 
 The terminal smoke test used a saved JSONL excerpt of the verified Phase 3

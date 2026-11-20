@@ -589,14 +589,17 @@ impl<'a> App<'a> {
             .visible(self.flows.len(), usize::from(area.height.saturating_sub(3)));
         let rows = self.flows[window.clone()].iter().map(|(index, flow)| {
             let (local, peer) = endpoints(flow);
+            let flow_id = flow.flow_id.as_str();
             Row::new([
-                flow.flow_id.clone(),
-                self.review
-                    .first_estimated_wall_ns(*index)
-                    .map_or_else(String::new, estimated_utc_time),
-                local,
-                peer,
-                flow.event_count.to_string(),
+                Cell::from(flow_id.strip_prefix("flow-").unwrap_or(flow_id)),
+                Cell::from(
+                    self.review
+                        .first_estimated_wall_ns(*index)
+                        .map_or_else(String::new, estimated_utc_time),
+                ),
+                Cell::from(local),
+                Cell::from(peer),
+                Cell::from(flow.event_count.to_string()),
             ])
         });
         let table = Table::new(
@@ -943,8 +946,7 @@ mod tests {
         let first = screen(&mut app, 124, 36);
         for label in [
             "example.jsonl",
-            "flow-2",
-            "flow-4",
+            "Evidence timeline · flow-2",
             "line-2",
             "CLOSE → SYN_SENT",
             "2 capture gaps",
@@ -961,10 +963,10 @@ mod tests {
             let time_column = header[..time_start].chars().count();
             let first_flow = lines.next().unwrap();
             let second_flow = lines.next().unwrap();
-            assert!(first_flow.contains("flow-2"));
+            assert_eq!(first_flow.split_whitespace().nth(1), Some("2"));
             assert!(first_flow.contains("~03:04:05"));
             assert!(first_flow.contains("192.0.2.1:40000"));
-            assert!(second_flow.contains("flow-4"));
+            assert_eq!(second_flow.split_whitespace().nth(1), Some("4"));
             assert_eq!(
                 second_flow
                     .chars()
@@ -1030,7 +1032,8 @@ mod tests {
         assert!(view.contains("Reviewing"));
         assert!(
             view.lines()
-                .any(|line| line.contains("flow-2") && line.contains("~03:04:05"))
+                .any(|line| line.split_whitespace().nth(1) == Some("2")
+                    && line.contains("~03:04:05"))
         );
         assert_eq!(app.timeline[app.evidence.selected].id, "line-2");
         press(&mut app, KeyCode::Char('f'));
