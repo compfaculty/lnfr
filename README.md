@@ -6,7 +6,7 @@ lnfr (Linux Network Flight Recorder) is a read-only eBPF tool for diagnosing
 IPv4 and IPv6 TCP connections. Watch flows in the terminal as they happen, or
 save a JSONL capture and inspect the evidence after the incident.
 
-![lnfr replaying a saved TCP capture with a retransmit in the evidence timeline](docs/images/project-image.png)
+![lnfr live TCP view showing a flow table, a selected flow's evidence timeline, and its event details](docs/images/project-image.png)
 
 ## What you can find out
 
