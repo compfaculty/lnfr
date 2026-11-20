@@ -224,6 +224,58 @@ to follow the latest flow again and **q** to stop the collector and restore
 the terminal. Unit tests cover rolling history, selection across updates,
 and collector shutdown through its control pipe.
 
+## Phase 6 CPU, memory, and event loss
+
+```bash
+cargo build --release --locked
+sudo python3 scripts/bench-phase6.py | tee /tmp/nfr-phase6-results.jsonl
+```
+
+The benchmark creates two temporary veth namespaces. For each offered rate,
+it compares the same TCP connect, one-byte request/reply, and close workload
+with no observer, capture alone, and the live Ratatui viewer on a local
+126×36 PTY. Both observer modes capture only the client socket namespace.
+Defaults are five seconds per run, 20 and 600 connection attempts per second,
+and two repeats with reversed mode order.
+
+The JSONL records achieved throughput, p50/p95/p99 workload latency, client
+and server CPU seconds and peak RSS, observer CPU and peak RSS, and the
+collector's final counters. Observer CPU includes waited-for descendants.
+RSS is maximum resident memory for a process, and the TUI and its collector
+also report separately sampled high-water marks. These RSS measurements
+cover userspace. Kernel ring and map memory are outside RSS.
+
+Distinguish ring-buffer reservation failures from intentional rate limiting.
+The sum of submitted, ring-buffer failures, and rate-limited events is the
+denominator for each loss fraction. Measure probe overhead with the change in
+workload CPU and latency versus the same-rate baseline, and viewer overhead
+with the difference between the two observer modes. These measurements
+describe the tested workload and terminal size.
+
+### Kali measurements
+
+Verified on `kali-z570` with kernel `7.2.15+kali-amd64`. All 12 runs
+completed every offered connection with zero errors. Each row summarizes
+two five-second runs. Observer CPU is the mean percentage of one CPU,
+including the collector in TUI mode. RSS is the highest sampled main-process
+high-water mark. Event counts and rate-limited percentages pool both repeats.
+
+| Connections/s | Mode | Client + server CPU per run | Mean run p95 | Observer CPU | Main peak RSS | Events received | Rate-limited |
+|---:|---|---:|---:|---:|---:|---:|---:|
+| 20 | Baseline | 0.199 s | 1.455 ms | — | — | — | — |
+| 20 | Capture | 0.225 s | 1.196 ms | 2.6% | 14.8 MiB | 1,200 | 0% |
+| 20 | Live TUI | 0.200 s | 1.056 ms | 8.0% | 10.5 MiB | 1,200 | 0% |
+| 600 | Baseline | 1.945 s | 0.753 ms | — | — | — | — |
+| 600 | Capture | 2.506 s | 0.842 ms | 6.6% | 14.8 MiB | 10,663 | 70.4% |
+| 600 | Live TUI | 2.348 s | 0.792 ms | 27.9% | 45.8 MiB | 12,153 | 66.2% |
+
+The TUI's collector peaked at about 14.8 MiB separately. Every observer run
+reported zero ring-buffer reservation failures and zero connect-tracking
+losses. At 600 connections/s, the capture-only runs deliberately suppressed
+25,337 of 36,000 eligible events. The live TUI runs suppressed 23,847 of
+36,000. These completeness figures and latency comparisons describe two
+short repeats, with visible variance in low-rate latency.
+
 ## Baseline tools
 
 `iproute2`, `ping`, `curl`, `ss`, `tcpdump`, `tc`, `nstat`, `bpftool`, optionally `conntrack`, `iperf3`, Python stdlib for controlled TCP servers.
