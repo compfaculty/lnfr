@@ -84,7 +84,7 @@ impl Window {
 }
 
 impl Capture {
-    pub(super) fn start() -> Result<Self> {
+    pub(super) fn start(netns_inum: Option<u32>) -> Result<Self> {
         let executable = std::env::current_exe().context("locate nfr capture executable")?;
         // geteuid has no pointer arguments and does not modify process state.
         let root = unsafe { libc::geteuid() } == 0;
@@ -96,6 +96,9 @@ impl Capture {
             sudo
         };
         command.args(["capture", "--stop-on-stdin-eof"]);
+        if let Some(inode) = netns_inum {
+            command.arg("--netns-inum").arg(inode.to_string());
+        }
         Self::spawn(command)
     }
 
@@ -204,6 +207,10 @@ impl Capture {
         }
     }
 
+    pub(super) fn summary(&self) -> Option<&str> {
+        self.window.end.as_deref()
+    }
+
     pub(super) fn stop(&mut self) -> Result<()> {
         self.input.take();
         let Some(worker) = self.worker.take() else {
@@ -212,8 +219,19 @@ impl Capture {
         let mut result = Ok(());
         // Drain the pipe while the loader detaches and writes its final summary.
         while let Ok(update) = self.updates.recv() {
-            if let Update::Finished(status) = update {
-                result = status;
+            match update {
+                Update::Line(line) => {
+                    if let Err(error) = self.window.push(line)
+                        && result.is_ok()
+                    {
+                        result = Err(error);
+                    }
+                }
+                Update::Finished(status) => {
+                    if result.is_ok() {
+                        result = status;
+                    }
+                }
             }
         }
         worker
@@ -268,5 +286,6 @@ printf '%s\n' '{"schema_version":2,"record":"capture_end"}'"#,
         let mut capture = Capture::spawn(command).unwrap();
         capture.stop().unwrap();
         assert!(capture.worker.is_none());
+        assert!(capture.summary().unwrap().contains("capture_end"));
     }
 }

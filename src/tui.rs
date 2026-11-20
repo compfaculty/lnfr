@@ -815,9 +815,9 @@ pub fn run(path: &Path) -> Result<()> {
     })
 }
 
-pub fn run_live() -> Result<()> {
+pub fn run_live(netns_inum: Option<u32>, summary: bool) -> Result<()> {
     check_terminal()?;
-    let mut capture = live::Capture::start()?;
+    let mut capture = live::Capture::start(netns_inum)?;
     let result = terminal_session(|terminal, stop| {
         let mut review = capture.review()?;
         let mut app = App::for_source(&review, capture.label().to_owned(), true, None);
@@ -842,7 +842,14 @@ pub fn run_live() -> Result<()> {
         Ok(())
     });
     let stopped = capture.stop();
-    result.and(stopped)
+    result.and(stopped)?;
+    if summary {
+        let report = capture
+            .summary()
+            .context("live collector did not emit a summary")?;
+        print!("{report}");
+    }
+    Ok(())
 }
 
 fn check_terminal() -> Result<()> {

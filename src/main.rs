@@ -32,6 +32,12 @@ enum Command {
         /// Start a live TCP capture
         #[arg(long)]
         live: bool,
+        /// Restrict live TCP capture to this socket namespace inode
+        #[arg(long, requires = "live", value_parser = clap::value_parser!(u32).range(1..))]
+        netns_inum: Option<u32>,
+        /// Print the collector's final JSON summary after exiting the live UI
+        #[arg(long, requires = "live")]
+        summary: bool,
     },
     /// List correlated flows from a saved capture
     Flows {
@@ -114,7 +120,12 @@ fn main() -> ExitCode {
         Command::Tui {
             input: Some(input), ..
         } => tui::run(&input),
-        Command::Tui { live: true, .. } => tui::run_live(),
+        Command::Tui {
+            live: true,
+            netns_inum,
+            summary,
+            ..
+        } => tui::run_live(netns_inum, summary),
         Command::Tui { .. } => unreachable!("clap requires a capture source"),
         Command::Nat { input } => flows::report_nat(&input),
         Command::Tc { input } => flows::report_tc(&input),
