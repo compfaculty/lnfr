@@ -250,7 +250,7 @@ def benchmark(binary, client, server, inode, root, rate, duration, mode, repeat)
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--binary", default="target/release/nfr")
+    parser.add_argument("--binary", default="target/release/lnfr")
     parser.add_argument("--duration", type=int, default=5)
     parser.add_argument("--rates", type=int, nargs="+", default=[20, 600])
     parser.add_argument("--repeats", type=int, default=2)
@@ -260,17 +260,17 @@ def main():
     if os.geteuid() != 0:
         parser.error("run the isolated benchmark with sudo on the Kali test host")
     binary = str(Path(args.binary).resolve(strict=True))
-    client, server = f"nfr6-c-{os.getpid()}", f"nfr6-s-{os.getpid()}"
+    client, server = f"lnfr6-c-{os.getpid()}", f"lnfr6-s-{os.getpid()}"
     with ExitStack() as stack:
-        root = Path(stack.enter_context(TemporaryDirectory(prefix="nfr-bench-")))
+        root = Path(stack.enter_context(TemporaryDirectory(prefix="lnfr-bench-")))
         for ns in (client, server):
             run("ip", "netns", "add", ns)
             stack.callback(run, "ip", "netns", "del", ns)
-        run("ip", "-n", client, "link", "add", "nfr0", "type", "veth",
-            "peer", "name", "nfr0", "netns", server)
+        run("ip", "-n", client, "link", "add", "lnfr0", "type", "veth",
+            "peer", "name", "lnfr0", "netns", server)
         for ns, address in ((client, "192.0.2.1"), (server, "192.0.2.2")):
-            run("ip", "-n", ns, "addr", "add", address + "/30", "dev", "nfr0")
-            run("ip", "-n", ns, "link", "set", "nfr0", "up")
+            run("ip", "-n", ns, "addr", "add", address + "/30", "dev", "lnfr0")
+            run("ip", "-n", ns, "link", "set", "lnfr0", "up")
         inode = os.stat(f"/run/netns/{client}").st_ino
         print(json.dumps({"kernel": os.uname().release, "host": os.uname().nodename,
                           "duration_s": args.duration, "repeats": args.repeats,

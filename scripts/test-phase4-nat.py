@@ -98,20 +98,20 @@ def endpoint(address, port):
 
 
 def main(binary):
-    client_ns, router_ns, server_ns = (f"nfr4-{name}-{os.getpid()}" for name in ("c", "r", "s"))
+    client_ns, router_ns, server_ns = (f"lnfr4-{name}-{os.getpid()}" for name in ("c", "r", "s"))
     with ExitStack() as stack:
-        tmp = Path(stack.enter_context(TemporaryDirectory(prefix="nfr-nat-")))
+        tmp = Path(stack.enter_context(TemporaryDirectory(prefix="lnfr-nat-")))
         for ns in (client_ns, router_ns, server_ns):
             run("ip", "netns", "add", ns)
             stack.callback(run, "ip", "netns", "del", ns)
 
         run("ip", "-n", router_ns, "link", "add", "left", "type", "veth", "peer", "name",
-            "nfr0", "netns", client_ns)
+            "lnfr0", "netns", client_ns)
         run("ip", "-n", router_ns, "link", "add", "right", "type", "veth", "peer", "name",
-            "nfr0", "netns", server_ns)
+            "lnfr0", "netns", server_ns)
         for ns, link, address in (
-            (client_ns, "nfr0", CLIENT), (router_ns, "left", "192.0.2.1"),
-            (router_ns, "right", ROUTER_OUT), (server_ns, "nfr0", SERVER)
+            (client_ns, "lnfr0", CLIENT), (router_ns, "left", "192.0.2.1"),
+            (router_ns, "right", ROUTER_OUT), (server_ns, "lnfr0", SERVER)
         ):
             run("ip", "-n", ns, "addr", "add", f"{address}/30", "dev", link)
             run("ip", "-n", ns, "link", "set", link, "up")
@@ -125,7 +125,7 @@ def main(binary):
         port = wait_for(lambda: int(port_path.read_text() or "0") if port_path.exists() else 0,
                         "server port", server)
         run(*router, "nft", "-f", "-", input=f"""
-table ip nfr_fixture {{
+table ip lnfr_fixture {{
     chain before {{
         type nat hook prerouting priority dstnat; policy accept;
         iifname "left" ip daddr {VIP} tcp dport {VIP_PORT} dnat to {SERVER}:{port}
@@ -221,9 +221,9 @@ if __name__ == "__main__":
     if os.geteuid() != 0:
         raise SystemExit("Run this fixture with sudo on the Kali test host.")
     if len(sys.argv) > 2:
-        raise SystemExit(f"Usage: {sys.argv[0]} [nfr-binary]")
-    binary = Path(sys.argv[1] if len(sys.argv) == 2 else "target/debug/nfr").resolve()
+        raise SystemExit(f"Usage: {sys.argv[0]} [lnfr-binary]")
+    binary = Path(sys.argv[1] if len(sys.argv) == 2 else "target/debug/lnfr").resolve()
     if not os.access(binary, os.X_OK):
-        raise SystemExit("Build nfr first: cargo build --locked")
+        raise SystemExit("Build lnfr first: cargo build --locked")
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
     main(str(binary))

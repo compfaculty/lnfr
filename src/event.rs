@@ -265,7 +265,7 @@ impl TcpEvent {
             "unsupported schema version {version}"
         );
 
-        // These offsets are the fixed little-endian V2 layout in nfr.bpf.c.
+        // These offsets are the fixed little-endian V2 layout in lnfr.bpf.c.
         let monotonic_ns = u64::from_le_bytes(field(bytes, 0));
         let family = u16::from_le_bytes(field(bytes, 60));
         let result = i32::from_le_bytes(field(bytes, 56));

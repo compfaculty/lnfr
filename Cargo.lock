@@ -621,6 +621,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4744e383959f0db86ede514b809b1c53251889093803c05267acc7d4e7030d70"
 
 [[package]]
+name = "lnfr"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "libbpf-cargo",
+ "libbpf-rs",
+ "libc",
+ "ratatui",
+ "serde",
+ "serde_json",
+ "signal-hook 0.4.6",
+]
+
+[[package]]
 name = "lock_api"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -669,21 +684,6 @@ dependencies = [
  "log",
  "wasi",
  "windows-sys",
-]
-
-[[package]]
-name = "nfr"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "libbpf-cargo",
- "libbpf-rs",
- "libc",
- "ratatui",
- "serde",
- "serde_json",
- "signal-hook 0.4.6",
 ]
 
 [[package]]

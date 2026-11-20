@@ -13,7 +13,7 @@ the read-only inventory from the repository root.
 ```bash
 bash scripts/preflight.sh
 cargo build --locked
-target/debug/nfr doctor
+target/debug/lnfr doctor
 ```
 
 Record the kernel, architecture, and toolchain versions when reporting a

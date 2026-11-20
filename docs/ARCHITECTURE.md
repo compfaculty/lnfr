@@ -2,8 +2,8 @@
 
 ## Data flow
 
-`nfr` is a single Rust executable for x86-64 Linux. The build compiles the C
-CO-RE probes in [bpf/nfr.bpf.c](../bpf/nfr.bpf.c) and generates a Rust
+`lnfr` is a single Rust executable for x86-64 Linux. The build compiles the C
+CO-RE probes in [bpf/lnfr.bpf.c](../bpf/lnfr.bpf.c) and generates a Rust
 skeleton with `libbpf-cargo`.
 
 ```text
@@ -191,7 +191,7 @@ forwarding probes cannot load.
 
 ## Coverage and operational limits
 
-NFR records headers and metadata, including information that can identify
+lnfr records headers and metadata, including information that can identify
 hosts and workloads. Capture writes to stdout. Saved files and retention
 are managed by the caller. The probes leave packets and forwarding
 decisions untouched.

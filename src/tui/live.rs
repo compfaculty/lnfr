@@ -85,7 +85,7 @@ impl Window {
 
 impl Capture {
     pub(super) fn start(netns_inum: Option<u32>) -> Result<Self> {
-        let executable = std::env::current_exe().context("locate nfr capture executable")?;
+        let executable = std::env::current_exe().context("locate lnfr capture executable")?;
         // geteuid has no pointer arguments and does not modify process state.
         let root = unsafe { libc::geteuid() } == 0;
         let mut command = if root {

@@ -33,7 +33,7 @@ use crate::{
 };
 
 mod bpf {
-    include!(concat!(env!("OUT_DIR"), "/nfr.skel.rs"));
+    include!(concat!(env!("OUT_DIR"), "/lnfr.skel.rs"));
 }
 
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
@@ -124,7 +124,7 @@ pub fn run(options: Options<'_>) -> Result<()> {
     }
 
     let mut object = MaybeUninit::uninit();
-    let mut open = bpf::NfrSkelBuilder::default()
+    let mut open = bpf::LnfrSkelBuilder::default()
         .open(&mut object)
         .context("open embedded BPF object")?;
     let config = open

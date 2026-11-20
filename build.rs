@@ -11,10 +11,10 @@ fn main() {
 
     let out = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR"));
     SkeletonBuilder::new()
-        .source("bpf/nfr.bpf.c")
-        .obj(out.join("nfr.bpf.o"))
+        .source("bpf/lnfr.bpf.c")
+        .obj(out.join("lnfr.bpf.o"))
         .clang_args(["-I/usr/include/x86_64-linux-gnu", "-Wall", "-Werror"])
-        .build_and_generate(out.join("nfr.skel.rs"))
+        .build_and_generate(out.join("lnfr.skel.rs"))
         .expect("compile the BPF probe and generate its skeleton");
-    println!("cargo:rerun-if-changed=bpf/nfr.bpf.c");
+    println!("cargo:rerun-if-changed=bpf/lnfr.bpf.c");
 }

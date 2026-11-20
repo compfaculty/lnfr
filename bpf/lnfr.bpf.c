@@ -10,13 +10,13 @@
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
 
-#define NFR_RING_BYTES (256 * 1024)
+#define LNFR_RING_BYTES (256 * 1024)
 #define NS_PER_SECOND 1000000000ULL
-#define NFR_AF_INET 2
-#define NFR_AF_INET6 10
-#define NFR_IPPROTO_TCP 6
-#define NFR_CONNECT_LIMIT 1024
-#define NFR_SKB_DST_NOREF 1UL
+#define LNFR_AF_INET 2
+#define LNFR_AF_INET6 10
+#define LNFR_IPPROTO_TCP 6
+#define LNFR_CONNECT_LIMIT 1024
+#define LNFR_SKB_DST_NOREF 1UL
 
 enum event_kind {
     SOCKET_STATE = 1,
@@ -152,7 +152,7 @@ struct capture_stats {
 
 struct {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
-    __uint(max_entries, NFR_RING_BYTES);
+    __uint(max_entries, LNFR_RING_BYTES);
 } events SEC(".maps");
 
 struct {
@@ -164,7 +164,7 @@ struct {
 
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, NFR_CONNECT_LIMIT);
+    __uint(max_entries, LNFR_CONNECT_LIMIT);
     __type(key, __u64);
     __type(value, __u64);
 } connect_started SEC(".maps");
@@ -237,7 +237,7 @@ static __always_inline struct tcp_event_v2 *reserve_event(
 {
     __u16 family = BPF_CORE_READ(sk, __sk_common.skc_family);
 
-    if (family != NFR_AF_INET && family != NFR_AF_INET6)
+    if (family != LNFR_AF_INET && family != LNFR_AF_INET6)
         return 0;
 
     struct tcp_event_v2 *event = reserve_record(family, netns, kind, counts);
@@ -255,7 +255,7 @@ static __always_inline struct tcp_event_v2 *reserve_event(
     event->remote_port = bpf_ntohs(BPF_CORE_READ(sk, __sk_common.skc_dport));
     event->bound_ifindex = BPF_CORE_READ(sk, __sk_common.skc_bound_dev_if);
 
-    if (family == NFR_AF_INET) {
+    if (family == LNFR_AF_INET) {
         BPF_CORE_READ_INTO((__be32 *)event->local_addr, sk, __sk_common.skc_rcv_saddr);
         BPF_CORE_READ_INTO((__be32 *)event->remote_addr, sk, __sk_common.skc_daddr);
     } else {
@@ -277,7 +277,7 @@ int on_socket_state(struct trace_event_raw_inet_sock_set_state *ctx)
 {
     const struct sock *sk = ctx->skaddr;
 
-    if (!sk || ctx->protocol != NFR_IPPROTO_TCP)
+    if (!sk || ctx->protocol != LNFR_IPPROTO_TCP)
         return 0;
 
     __u64 pid_tgid = bpf_get_current_pid_tgid();
@@ -327,7 +327,7 @@ int BPF_PROG(on_connect_enter, struct socket *socket)
 {
     struct sock *sk = BPF_CORE_READ(socket, sk);
 
-    if (!sk || BPF_CORE_READ(sk, sk_protocol) != NFR_IPPROTO_TCP)
+    if (!sk || BPF_CORE_READ(sk, sk_protocol) != LNFR_IPPROTO_TCP)
         return 0;
 
     __u64 pid_tgid = bpf_get_current_pid_tgid();
@@ -356,14 +356,14 @@ static __always_inline void read_requested_peer(struct tcp_event_v2 *event,
         bpf_probe_read_kernel(&family, sizeof(family), address))
         return;
 
-    if (family == NFR_AF_INET && length >= (int)sizeof(struct sockaddr_in)) {
+    if (family == LNFR_AF_INET && length >= (int)sizeof(struct sockaddr_in)) {
         struct sockaddr_in addr;
 
         if (bpf_probe_read_kernel(&addr, sizeof(addr), address))
             return;
         __builtin_memcpy(event->requested_addr, &addr.sin_addr, sizeof(addr.sin_addr));
         event->requested_port = bpf_ntohs(addr.sin_port);
-    } else if (family == NFR_AF_INET6 &&
+    } else if (family == LNFR_AF_INET6 &&
                length >= (int)__builtin_offsetof(struct sockaddr_in6, sin6_scope_id)) {
         struct sockaddr_in6 addr;
 
@@ -384,7 +384,7 @@ int BPF_PROG(on_connect_exit, struct socket *socket, struct sockaddr_unsized *ad
 {
     struct sock *sk = BPF_CORE_READ(socket, sk);
 
-    if (!sk || BPF_CORE_READ(sk, sk_protocol) != NFR_IPPROTO_TCP)
+    if (!sk || BPF_CORE_READ(sk, sk_protocol) != LNFR_IPPROTO_TCP)
         return 0;
 
     __u64 pid_tgid = bpf_get_current_pid_tgid();
@@ -416,7 +416,7 @@ SEC("fexit/inet_csk_accept")
 int BPF_PROG(on_accept, struct sock *listener, struct proto_accept_arg *arg,
              struct sock *accepted)
 {
-    if (!accepted || BPF_CORE_READ(accepted, sk_protocol) != NFR_IPPROTO_TCP)
+    if (!accepted || BPF_CORE_READ(accepted, sk_protocol) != LNFR_IPPROTO_TCP)
         return 0;
 
     __u64 pid_tgid = bpf_get_current_pid_tgid();
@@ -456,11 +456,11 @@ static __always_inline int observe_tc(struct __sk_buff *skb, __u8 kind)
             return TCX_NEXT;
         offset = (__u32)header.ihl * 4;
         if (header.version != 4 || offset < sizeof(header) ||
-            header.protocol != NFR_IPPROTO_TCP ||
+            header.protocol != LNFR_IPPROTO_TCP ||
             (bpf_ntohs(header.frag_off) & 0x3fff) != 0 ||
             bpf_ntohs(header.tot_len) < offset + 20)
             return TCX_NEXT;
-        family = NFR_AF_INET;
+        family = LNFR_AF_INET;
         __builtin_memcpy(src, &header.saddr, sizeof(header.saddr));
         __builtin_memcpy(dst, &header.daddr, sizeof(header.daddr));
     } else if (skb->protocol == bpf_htons(ETH_P_IPV6)) {
@@ -468,10 +468,10 @@ static __always_inline int observe_tc(struct __sk_buff *skb, __u8 kind)
 
         if (bpf_skb_load_bytes_relative(skb, 0, &header, sizeof(header), BPF_HDR_START_NET))
             return TCX_NEXT;
-        if (header.version != 6 || header.nexthdr != NFR_IPPROTO_TCP ||
+        if (header.version != 6 || header.nexthdr != LNFR_IPPROTO_TCP ||
             bpf_ntohs(header.payload_len) < 20)
             return TCX_NEXT;
-        family = NFR_AF_INET6;
+        family = LNFR_AF_INET6;
         offset = sizeof(header);
         __builtin_memcpy(src, &header.saddr, sizeof(header.saddr));
         __builtin_memcpy(dst, &header.daddr, sizeof(header.daddr));
@@ -570,7 +570,7 @@ static __always_inline int observe_route(struct sk_buff *skb, __u16 family)
         return 0;
 
     unsigned long refdst = BPF_CORE_READ(skb, _skb_refdst);
-    struct dst_entry *route = (void *)(refdst & ~NFR_SKB_DST_NOREF);
+    struct dst_entry *route = (void *)(refdst & ~LNFR_SKB_DST_NOREF);
 
     if (!route)
         return 0;
@@ -589,7 +589,7 @@ static __always_inline int observe_route(struct sk_buff *skb, __u16 family)
         network_header == (__u16)-1 || tail < network_header)
         return 0;
 
-    if (family == NFR_AF_INET) {
+    if (family == LNFR_AF_INET) {
         struct iphdr header;
 
         if (tail - network_header < sizeof(header) ||
@@ -633,13 +633,13 @@ static __always_inline int observe_route(struct sk_buff *skb, __u16 family)
 SEC("fentry/ip_forward")
 int BPF_PROG(on_ipv4_forward, struct sk_buff *skb)
 {
-    return observe_route(skb, NFR_AF_INET);
+    return observe_route(skb, LNFR_AF_INET);
 }
 
 SEC("fentry/ip6_forward")
 int BPF_PROG(on_ipv6_forward, struct sk_buff *skb)
 {
-    return observe_route(skb, NFR_AF_INET6);
+    return observe_route(skb, LNFR_AF_INET6);
 }
 
 char LICENSE[] SEC("license") = "GPL";

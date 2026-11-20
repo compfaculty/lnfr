@@ -507,7 +507,7 @@ impl<'a> App<'a> {
             Paragraph::new(vec![
                 Line::from(vec![
                     Span::styled(
-                        " NFR  ",
+                        " lnfr  ",
                         Style::new().fg(ACCENT).add_modifier(Modifier::BOLD),
                     ),
                     Span::styled(self.filename.as_str(), Style::new().fg(TEXT)),
@@ -855,7 +855,7 @@ pub fn run_live(netns_inum: Option<u32>, summary: bool) -> Result<()> {
 fn check_terminal() -> Result<()> {
     ensure!(
         io::stdin().is_terminal() && io::stdout().is_terminal(),
-        "nfr tui requires an interactive terminal"
+        "lnfr tui requires an interactive terminal"
     );
     Ok(())
 }

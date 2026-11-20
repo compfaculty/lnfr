@@ -7,12 +7,12 @@ if (( EUID != 0 )); then
     exit 2
 fi
 
-nfr=$(realpath "${1:-target/debug/nfr}")
-test -x "$nfr" || { echo "Build nfr first: cargo build --locked" >&2; exit 2; }
+lnfr=$(realpath "${1:-target/debug/lnfr}")
+test -x "$lnfr" || { echo "Build lnfr first: cargo build --locked" >&2; exit 2; }
 tmp=$(mktemp -d)
-client="nfr4-route-client-$$"
-router="nfr4-route-router-$$"
-server="nfr4-route-server-$$"
+client="lnfr4-route-client-$$"
+router="lnfr4-route-router-$$"
+server="lnfr4-route-server-$$"
 namespaces=()
 children=()
 
@@ -46,8 +46,8 @@ for namespace in "$client" "$router" "$server"; do
     namespaces+=("$namespace")
 done
 
-ip -n "$router" link add left type veth peer name nfr0 netns "$client"
-ip -n "$router" link add right type veth peer name nfr0 netns "$server"
+ip -n "$router" link add left type veth peer name lnfr0 netns "$client"
+ip -n "$router" link add right type veth peer name lnfr0 netns "$server"
 
 address_link() {
     local ns=$1 dev=$2 ipv4=$3 ipv6=$4
@@ -56,10 +56,10 @@ address_link() {
     ip -n "$ns" link set "$dev" up
 }
 
-address_link "$client" nfr0 192.0.2.2 2001:db8:10::2
+address_link "$client" lnfr0 192.0.2.2 2001:db8:10::2
 address_link "$router" left 192.0.2.1 2001:db8:10::1
 address_link "$router" right 198.51.100.1 2001:db8:20::1
-address_link "$server" nfr0 198.51.100.2 2001:db8:20::2
+address_link "$server" lnfr0 198.51.100.2 2001:db8:20::2
 ip -n "$client" -4 route add 198.51.100.0/30 via 192.0.2.1
 ip -n "$server" -4 route add 192.0.2.0/30 via 198.51.100.1
 ip -n "$client" -6 route add 2001:db8:20::/64 via 2001:db8:10::1
@@ -102,7 +102,7 @@ children+=("$server_pid")
 wait_for '^[0-9][0-9]* [0-9][0-9]*$' "$tmp/ports" "$server_pid"
 read -r port4 port6 <"$tmp/ports"
 
-env --default-signal=INT "${router_net[@]}" "$nfr" capture --routing --duration 25s \
+env --default-signal=INT "${router_net[@]}" "$lnfr" capture --routing --duration 25s \
     --netns-inum "$client_netns" >"$tmp/session.jsonl" &
 capture_pid=$!
 children+=("$capture_pid")
@@ -159,8 +159,8 @@ for pid in "${sniffers[@]}"; do wait "$pid"; done
 children=()
 
 bpftool -j prog show >"$tmp/programs-after.json"
-"$nfr" routes --input "$tmp/session.jsonl" >"$tmp/routes.jsonl"
-"$nfr" flows --input "$tmp/session.jsonl" >"$tmp/flows.jsonl"
+"$lnfr" routes --input "$tmp/session.jsonl" >"$tmp/routes.jsonl"
+"$lnfr" flows --input "$tmp/session.jsonl" >"$tmp/flows.jsonl"
 
 python3 - "$tmp" "$netns" <<'PY'
 import json

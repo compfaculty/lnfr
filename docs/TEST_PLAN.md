@@ -30,7 +30,7 @@ kernel's `netem` qdisc.
 
 ```bash
 cargo build --locked
-target/debug/nfr doctor
+target/debug/lnfr doctor
 sudo bash scripts/test-phase1.sh
 sudo python3 scripts/test-phase2.py
 ```
@@ -60,7 +60,7 @@ PASS: N1 TCP lifecycle, N2 refusal, N3 retransmission, N8 IPv6
 
 The veth fixture above now also runs N4, a blocking connect through sustained
 netem loss. It checks the client's `ETIMEDOUT` against the kernel connect event.
-The fixture runs `nfr flows` and `nfr explain` on both captures and checks that
+The fixture runs `lnfr flows` and `lnfr explain` on both captures and checks that
 each expected diagnosis cites its exact original event. It also checks that
 timeline events are ordered by monotonic timestamp and retransmit reports
 retain uncertainty about the cause.
@@ -187,13 +187,13 @@ To browse a verified client capture from the veth fixture:
 
 ```bash
 cargo build --locked
-nfr_veth_capture=$(mktemp /tmp/nfr-veth.XXXXXX.jsonl)
-sudo python3 scripts/test-phase2.py --emit-client-jsonl >"$nfr_veth_capture"
-target/debug/nfr tui --input "$nfr_veth_capture"
+lnfr_veth_capture=$(mktemp /tmp/lnfr-veth.XXXXXX.jsonl)
+sudo python3 scripts/test-phase2.py --emit-client-jsonl >"$lnfr_veth_capture"
+target/debug/lnfr tui --input "$lnfr_veth_capture"
 ```
 
 Select a flow, move to its timeline, and inspect an event. Check that **d**
-shows the same diagnosis and evidence IDs as `nfr explain` for that flow.
+shows the same diagnosis and evidence IDs as `lnfr explain` for that flow.
 Check **c** for capture coverage and **q** for a clean return to the shell.
 Ratatui test-backend checks also exercise resizing, empty captures,
 selection, and detail views without privileges.
@@ -213,7 +213,7 @@ PASS: 78×32 flow table, refusal evidence, coverage, and terminal restoration
 ```bash
 cargo build --locked
 sudo -v
-target/debug/nfr tui --live
+target/debug/lnfr tui --live
 ```
 
 From another terminal, make a TCP connection, for example
@@ -228,7 +228,7 @@ and collector shutdown through its control pipe.
 
 ```bash
 cargo build --release --locked
-sudo python3 scripts/bench-phase6.py | tee /tmp/nfr-phase6-results.jsonl
+sudo python3 scripts/bench-phase6.py | tee /tmp/lnfr-phase6-results.jsonl
 ```
 
 The benchmark creates two temporary veth namespaces. For each offered rate,
@@ -282,7 +282,7 @@ short repeats, with visible variance in low-rate latency.
 
 ## Matrix
 
-| ID | Test | Ground truth | Expected NFR behavior |
+| ID | Test | Ground truth | Expected lnfr behavior |
 |---|---|---|---|
 | N1 | veth TCP handshake + data | tcpdump + socket outcomes | Flow identified; state timeline, interface and tuple accurate |
 | N2 | no listener (TCP RST/refused) | client errno, tcpdump RST | Classify refusal if direct evidence; no "packet dropped" claim |

@@ -7,11 +7,11 @@ if (( EUID != 0 )); then
     exit 2
 fi
 
-nfr=${1:-target/debug/nfr}
-test -x "$nfr" || { echo "Build nfr first: cargo build --locked" >&2; exit 2; }
+lnfr=${1:-target/debug/lnfr}
+test -x "$lnfr" || { echo "Build lnfr first: cargo build --locked" >&2; exit 2; }
 tmp=$(mktemp -d)
-client_ns="nfr-client-$$"
-server_ns="nfr-server-$$"
+client_ns="lnfr-client-$$"
+server_ns="lnfr-server-$$"
 client_created=0
 server_created=0
 capture_pid=
@@ -49,11 +49,11 @@ ip netns add "$client_ns"
 client_created=1
 ip netns add "$server_ns"
 server_created=1
-ip -n "$client_ns" link add nfr0 type veth peer name nfr0 netns "$server_ns"
-ip -n "$client_ns" addr add 192.0.2.1/30 dev nfr0
-ip -n "$server_ns" addr add 192.0.2.2/30 dev nfr0
-ip -n "$client_ns" link set nfr0 up
-ip -n "$server_ns" link set nfr0 up
+ip -n "$client_ns" link add lnfr0 type veth peer name lnfr0 netns "$server_ns"
+ip -n "$client_ns" addr add 192.0.2.1/30 dev lnfr0
+ip -n "$server_ns" addr add 192.0.2.2/30 dev lnfr0
+ip -n "$client_ns" link set lnfr0 up
+ip -n "$server_ns" link set lnfr0 up
 
 ip netns exec "$server_ns" python3 - "$tmp/port" <<'PY' &
 import socket
@@ -95,7 +95,7 @@ tgid=$(cat "$tmp/tgid")
 
 # An async Bash child can inherit SIGINT ignored. Reset it before exec so the
 # foreground Ctrl+C code path is exercised when the fixture sends SIGINT.
-env --default-signal=INT "$nfr" capture --state-only --duration 15s --tgid "$tgid" >"$tmp/capture.jsonl" &
+env --default-signal=INT "$lnfr" capture --state-only --duration 15s --tgid "$tgid" >"$tmp/capture.jsonl" &
 capture_pid=$!
 wait_for_file "$tmp/capture.jsonl" "$capture_pid"
 touch "$tmp/connect"
@@ -108,7 +108,7 @@ kill -INT "$capture_pid"
 wait "$capture_pid"
 capture_pid=
 
-"$nfr" capture --state-only --duration 1s --tgid "$tgid" >"$tmp/timed.jsonl"
+"$lnfr" capture --state-only --duration 1s --tgid "$tgid" >"$tmp/timed.jsonl"
 
 python3 - "$tmp/capture.jsonl" "$tmp/timed.jsonl" "$tgid" <<'PY'
 import json

@@ -19,7 +19,7 @@ for fixture results and kernel-specific checks.
   Compare the workload by itself, with capture, and with the live viewer.
 - Verify behavior across kernels, including clear diagnostics when hooks or
   permissions are unavailable.
-- Improve setup and packaging for people running NFR outside the development host.
+- Improve setup and packaging for people running lnfr outside the development host.
 
 ## Possible extensions
 

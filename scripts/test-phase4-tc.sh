@@ -7,11 +7,11 @@ if (( EUID != 0 )); then
     exit 2
 fi
 
-nfr=$(realpath "${1:-target/debug/nfr}")
-test -x "$nfr" || { echo "Build nfr first: cargo build --locked" >&2; exit 2; }
+lnfr=$(realpath "${1:-target/debug/lnfr}")
+test -x "$lnfr" || { echo "Build lnfr first: cargo build --locked" >&2; exit 2; }
 tmp=$(mktemp -d)
-client="nfr4-tc-client-$$"
-server="nfr4-tc-server-$$"
+client="lnfr4-tc-client-$$"
+server="lnfr4-tc-server-$$"
 client_created=0
 server_created=0
 capture_pid=
@@ -49,17 +49,17 @@ ip netns add "$client"
 client_created=1
 ip netns add "$server"
 server_created=1
-ip -n "$client" link add nfr0 type veth peer name nfr0 netns "$server"
-ip -n "$client" addr add 192.0.2.1/30 dev nfr0
-ip -n "$server" addr add 192.0.2.2/30 dev nfr0
-ip -n "$client" link set nfr0 up
-ip -n "$server" link set nfr0 up
+ip -n "$client" link add lnfr0 type veth peer name lnfr0 netns "$server"
+ip -n "$client" addr add 192.0.2.1/30 dev lnfr0
+ip -n "$server" addr add 192.0.2.2/30 dev lnfr0
+ip -n "$client" link set lnfr0 up
+ip -n "$server" link set lnfr0 up
 
 netns=$(stat -Lc %i "/run/netns/$client")
 client_net=(nsenter "--net=/run/netns/$client" --)
-"${client_net[@]}" tc -j qdisc show dev nfr0 >"$tmp/qdisc-before"
-"${client_net[@]}" bpftool -j net show dev nfr0 >"$tmp/links-before"
-ifindex=$("${client_net[@]}" ip -j link show dev nfr0 | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["ifindex"])')
+"${client_net[@]}" tc -j qdisc show dev lnfr0 >"$tmp/qdisc-before"
+"${client_net[@]}" bpftool -j net show dev lnfr0 >"$tmp/links-before"
+ifindex=$("${client_net[@]}" ip -j link show dev lnfr0 | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["ifindex"])')
 
 ip netns exec "$server" python3 - "$tmp/port" <<'PY' &
 import socket
@@ -81,14 +81,14 @@ server_pid=$!
 wait_for '^[0-9][0-9]*$' "$tmp/port" "$server_pid"
 port=$(cat "$tmp/port")
 
-env --default-signal=INT "${client_net[@]}" "$nfr" capture --duration 20s \
-    --tc-interface nfr0 --netns-inum "$netns" >"$tmp/session.jsonl" &
+env --default-signal=INT "${client_net[@]}" "$lnfr" capture --duration 20s \
+    --tc-interface lnfr0 --netns-inum "$netns" >"$tmp/session.jsonl" &
 capture_pid=$!
 wait_for '"record":"capture_start"' "$tmp/session.jsonl" "$capture_pid"
 
-"${client_net[@]}" tc -j qdisc show dev nfr0 >"$tmp/qdisc-during"
+"${client_net[@]}" tc -j qdisc show dev lnfr0 >"$tmp/qdisc-during"
 
-env --default-signal=INT ip netns exec "$client" tcpdump --immediate-mode -p -nn -l -i nfr0 tcp \
+env --default-signal=INT ip netns exec "$client" tcpdump --immediate-mode -p -nn -l -i lnfr0 tcp \
     >"$tmp/wire" 2>"$tmp/tcpdump.stderr" &
 tcpdump_pid=$!
 wait_for 'listening on' "$tmp/tcpdump.stderr" "$tcpdump_pid"
@@ -119,18 +119,18 @@ capture_pid=
 wait "$tcpdump_pid"
 tcpdump_pid=
 
-"${client_net[@]}" tc -j qdisc show dev nfr0 >"$tmp/qdisc-after"
-"${client_net[@]}" bpftool -j net show dev nfr0 >"$tmp/links-after"
-"$nfr" tc --input "$tmp/session.jsonl" >"$tmp/observations.jsonl"
-"$nfr" flows --input "$tmp/session.jsonl" >"$tmp/flows.jsonl"
+"${client_net[@]}" tc -j qdisc show dev lnfr0 >"$tmp/qdisc-after"
+"${client_net[@]}" bpftool -j net show dev lnfr0 >"$tmp/links-after"
+"$lnfr" tc --input "$tmp/session.jsonl" >"$tmp/observations.jsonl"
+"$lnfr" flows --input "$tmp/session.jsonl" >"$tmp/flows.jsonl"
 
-python3 - "$tmp" "$nfr" "$netns" "$ifindex" "$port" <<'PY'
+python3 - "$tmp" "$lnfr" "$netns" "$ifindex" "$port" <<'PY'
 import json
 import subprocess
 import sys
 from pathlib import Path
 
-root, nfr, netns, ifindex, port = sys.argv[1:]
+root, lnfr, netns, ifindex, port = sys.argv[1:]
 root = Path(root)
 netns, ifindex, port = map(int, (netns, ifindex, port))
 source_port = int((root / "source-port").read_text())
@@ -141,7 +141,7 @@ def jsonl(path):
     return [json.loads(line) for line in (root / path).read_text().splitlines()]
 
 start, *events, end = jsonl("session.jsonl")
-assert start["tc_interface"] == {"name": "nfr0", "netns_inum": netns, "ifindex": ifindex}, start
+assert start["tc_interface"] == {"name": "lnfr0", "netns_inum": netns, "ifindex": ifindex}, start
 assert {"tcx/ingress", "tcx/egress"} <= set(start["active_probes"]), start
 assert end["reason"] == "signal" and end["received"] == len(events) == end["stats"]["submitted"], end
 assert end["stats"]["ring_lost"] == end["stats"]["rate_limited"] == 0, end
@@ -167,7 +167,7 @@ assert json.loads((root / "links-before").read_text()) == json.loads((root / "li
 flow = next(item for item in jsonl("flows.jsonl") if item["tuple"]
             and item["tuple"]["local"] == local and item["tuple"]["remote"] == remote)
 report = json.loads(subprocess.check_output(
-    [nfr, "explain", "--input", str(root / "session.jsonl"), "--flow", flow["flow_id"]], text=True
+    [lnfr, "explain", "--input", str(root / "session.jsonl"), "--flow", flow["flow_id"]], text=True
 ))
 assert syn in report["tc_observations"] and synack in report["tc_observations"], report
 assert not any("counts" in gap for gap in report["capture_gaps"]), report["capture_gaps"]

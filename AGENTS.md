@@ -1,6 +1,6 @@
 # AGENTS.md — Codex project contract
 
-You are an engineering agent working on **Linux Network Flight Recorder** (NFR). Read `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/REMOTE_DEV.md`, and `docs/TEST_PLAN.md` before changes.
+You are an engineering agent working on **Linux Network Flight Recorder** (lnfr). Read `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/REMOTE_DEV.md`, and `docs/TEST_PLAN.md` before changes.
 
 ## Environment and tooling
 - macOS is the developer's visual workstation; **all actual eBPF compilation, execution and tests take place on x86_64 Kali Linux host `kali-z570`**.

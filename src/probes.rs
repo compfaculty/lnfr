@@ -86,20 +86,20 @@ impl Features {
             println!("net.netfilter.nf_conntrack_events: {}", setting.trim());
         }
         println!(
-            "nfr capture --conntrack verifies ctnetlink subscription in the current network namespace."
+            "lnfr capture --conntrack verifies ctnetlink subscription in the current network namespace."
         );
         println!(
-            "nfr capture --tc-interface IFACE verifies TCX attach in the current network namespace."
+            "lnfr capture --tc-interface IFACE verifies TCX attach in the current network namespace."
         );
         println!(
             "Bridge module BTF (/sys/kernel/btf/bridge): {}",
             available(Some(bridge_module_btf()))
         );
         println!(
-            "nfr capture --bridge-interface IFACE verifies {}.",
+            "lnfr capture --bridge-interface IFACE verifies {}.",
             BRIDGE_FORWARD
         );
-        println!("nfr capture verifies load and attach permissions.");
+        println!("lnfr capture verifies load and attach permissions.");
     }
 }
 

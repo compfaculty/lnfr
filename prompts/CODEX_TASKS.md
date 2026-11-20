@@ -8,11 +8,11 @@ Use **one prompt per iteration**. Always include `AGENTS.md` in context and requ
 
 ## Task 1 — Minimal skeleton
 
-> Implement Phase 1 only: a reproducible Rust Cargo + C/libbpf CO-RE program skeleton, one available kernel tracepoint, bounded ring buffer, versioned event schema, Rust loader and `nfr doctor`/`nfr capture --duration`. Ensure clean Ctrl+C detach. Add build instructions, tests, and run the checks allowed on this host. No network-path claims yet. Report unsupported capabilities clearly.
+> Implement Phase 1 only: a reproducible Rust Cargo + C/libbpf CO-RE program skeleton, one available kernel tracepoint, bounded ring buffer, versioned event schema, Rust loader and `lnfr doctor`/`lnfr capture --duration`. Ensure clean Ctrl+C detach. Add build instructions, tests, and run the checks allowed on this host. No network-path claims yet. Report unsupported capabilities clearly.
 
 ## Task 2 — TCP MVP
 
-> Implement Phase 2 for TCP lifecycle events and retransmission observations using only hooks confirmed present by `nfr doctor`. Track socket/flow identity and IPv4/IPv6; bounded maps; event loss. Add reproducible veth-netns fixtures N1, N2, N3 and verify output against tcpdump/ss. Never state network loss location without evidence. Provide real captured output and test results.
+> Implement Phase 2 for TCP lifecycle events and retransmission observations using only hooks confirmed present by `lnfr doctor`. Track socket/flow identity and IPv4/IPv6; bounded maps; event loss. Add reproducible veth-netns fixtures N1, N2, N3 and verify output against tcpdump/ss. Never state network loss location without evidence. Provide real captured output and test results.
 
 ## Task 3 — Evidence-driven diagnosis
 

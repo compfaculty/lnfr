@@ -156,7 +156,7 @@ fn main() -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("nfr: {error:#}");
+            eprintln!("lnfr: {error:#}");
             ExitCode::FAILURE
         }
     }

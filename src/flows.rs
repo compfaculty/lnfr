@@ -611,7 +611,7 @@ pub fn report(path: &Path, selected: Option<&str>) -> Result<()> {
         let index = review
             .summaries()
             .position(|flow| flow.flow_id == id)
-            .with_context(|| format!("flow {id} not found; run nfr flows on the same capture"))?;
+            .with_context(|| format!("flow {id} not found; run lnfr flows on the same capture"))?;
         serde_json::to_writer_pretty(&mut output, &review.explanation(index))?;
         writeln!(output)?;
     } else {

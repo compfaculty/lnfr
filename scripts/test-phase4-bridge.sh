@@ -7,12 +7,12 @@ if (( EUID != 0 )); then
     exit 2
 fi
 
-nfr=$(realpath "${1:-target/debug/nfr}")
-test -x "$nfr" || { echo "Build nfr first: cargo build --locked" >&2; exit 2; }
+lnfr=$(realpath "${1:-target/debug/lnfr}")
+test -x "$lnfr" || { echo "Build lnfr first: cargo build --locked" >&2; exit 2; }
 tmp=$(mktemp -d)
-client="nfr4-br-client-$$"
-switch="nfr4-br-switch-$$"
-server="nfr4-br-server-$$"
+client="lnfr4-br-client-$$"
+switch="lnfr4-br-switch-$$"
+server="lnfr4-br-server-$$"
 client_mac=02:00:00:00:00:11
 server_mac=02:00:00:00:00:22
 namespaces=()
@@ -51,19 +51,19 @@ for namespace in "$client" "$switch" "$server"; do
 done
 
 ip -n "$switch" link add br0 type bridge stp_state 0
-ip -n "$switch" link add left type veth peer name nfr0 netns "$client"
-ip -n "$switch" link add right type veth peer name nfr0 netns "$server"
+ip -n "$switch" link add left type veth peer name lnfr0 netns "$client"
+ip -n "$switch" link add right type veth peer name lnfr0 netns "$server"
 for port in left right; do
     ip -n "$switch" link set "$port" master br0
     ip -n "$switch" link set "$port" up
 done
 ip -n "$switch" link set br0 up
-ip -n "$client" link set nfr0 address "$client_mac"
-ip -n "$server" link set nfr0 address "$server_mac"
-ip -n "$client" addr add 192.0.2.1/30 dev nfr0
-ip -n "$server" addr add 192.0.2.2/30 dev nfr0
-ip -n "$client" link set nfr0 up
-ip -n "$server" link set nfr0 up
+ip -n "$client" link set lnfr0 address "$client_mac"
+ip -n "$server" link set lnfr0 address "$server_mac"
+ip -n "$client" addr add 192.0.2.1/30 dev lnfr0
+ip -n "$server" addr add 192.0.2.2/30 dev lnfr0
+ip -n "$client" link set lnfr0 up
+ip -n "$server" link set lnfr0 up
 
 netns=$(stat -Lc %i "/run/netns/$switch")
 client_netns=$(stat -Lc %i "/run/netns/$client")
@@ -92,7 +92,7 @@ jobs_to_stop+=("$server_pid")
 wait_for '^[0-9][0-9]*$' "$tmp/port" "$server_pid"
 port=$(cat "$tmp/port")
 
-env --default-signal=INT "${switch_net[@]}" "$nfr" capture --duration 20s \
+env --default-signal=INT "${switch_net[@]}" "$lnfr" capture --duration 20s \
     --bridge-interface br0 --netns-inum "$client_netns" >"$tmp/session.jsonl" &
 capture_pid=$!
 jobs_to_stop+=("$capture_pid")
@@ -138,8 +138,8 @@ for pid in "${sniffers[@]}"; do wait "$pid"; done
 jobs_to_stop=()
 
 bpftool -j prog show >"$tmp/programs-after.json"
-"$nfr" bridge --input "$tmp/session.jsonl" >"$tmp/observations.jsonl"
-"$nfr" flows --input "$tmp/session.jsonl" >"$tmp/flows.jsonl"
+"$lnfr" bridge --input "$tmp/session.jsonl" >"$tmp/observations.jsonl"
+"$lnfr" flows --input "$tmp/session.jsonl" >"$tmp/flows.jsonl"
 
 python3 - "$tmp" "$netns" "$client_mac" "$server_mac" <<'PY'
 import json

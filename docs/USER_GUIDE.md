@@ -1,8 +1,8 @@
-# NFR user guide
+# lnfr user guide
 
 ## Build and check your host
 
-Build on x86-64 Linux. NFR is tested on Kali Linux. The build needs a Rust
+Build on x86-64 Linux. lnfr is tested on Kali Linux. The build needs a Rust
 toolchain with Cargo and edition 2024 support, Clang with the BPF backend,
 a C toolchain, Linux and libbpf headers, libelf and zlib development
 libraries, and pkg-config. Cargo compiles the BPF object and generates its
@@ -10,7 +10,7 @@ Rust bindings during the build.
 
 ```bash
 cargo build --locked
-target/debug/nfr doctor
+target/debug/lnfr doctor
 ```
 
 Capture needs readable kernel BTF at `/sys/kernel/btf/vmlinux`, access to the
@@ -24,7 +24,7 @@ any were disabled. Optional hooks and their requirements are listed in the
 
 ```bash
 sudo -v
-target/debug/nfr tui --live
+target/debug/lnfr tui --live
 ```
 
 Run both commands in the same terminal. The viewer launches a privileged TCP
@@ -37,8 +37,8 @@ saved capture when you need to keep the evidence after exiting.
 ## Capture and inspect a session
 
 ```bash
-sudo target/debug/nfr capture --duration 10s > session.jsonl
-target/debug/nfr tui --input session.jsonl
+sudo target/debug/lnfr capture --duration 10s > session.jsonl
+target/debug/lnfr tui --input session.jsonl
 ```
 
 Reproduce the issue from another terminal during the capture. The duration
@@ -54,15 +54,15 @@ For command-line analysis, list the flows, then enter one of the reported IDs
 from the same file.
 
 ```bash
-target/debug/nfr flows --input session.jsonl
+target/debug/lnfr flows --input session.jsonl
 read -r -p 'Flow ID: ' flow_id
-target/debug/nfr explain --input session.jsonl --flow "$flow_id"
+target/debug/lnfr explain --input session.jsonl --flow "$flow_id"
 ```
 
 The explanation includes the original event for each evidence ID, in monotonic
 time order. An ID such as `line-2` points to line 2 of the capture. Confirmed
 diagnosis confidence describes what the cited event directly reports.
-Correlation confidence describes how confidently NFR assigned the events to the
+Correlation confidence describes how confidently lnfr assigned the events to the
 same flow. Both flow and evidence IDs are local to the capture.
 
 ### Focus a capture
@@ -84,7 +84,7 @@ process or namespace identifiers. Review them before sharing.
 Enable the relevant observer when capturing. Run in the namespace that owns
 the interface, bridge, forwarding path, or NAT state. To enter a named network
 namespace while keeping the host's tracefs visible, use
-`sudo nsenter --net=/run/netns/NAME -- "$PWD/target/debug/nfr" capture ...`.
+`sudo nsenter --net=/run/netns/NAME -- "$PWD/target/debug/lnfr" capture ...`.
 
 | Capture option | Report subcommand | What the observation tells you |
 | --- | --- | --- |
@@ -96,8 +96,8 @@ namespace while keeping the host's tracefs visible, use
 For example, on the host or in the namespace performing NAT:
 
 ```bash
-sudo target/debug/nfr capture --conntrack --duration 10s > nat-session.jsonl
-target/debug/nfr nat --input nat-session.jsonl
+sudo target/debug/lnfr capture --conntrack --duration 10s > nat-session.jsonl
+target/debug/lnfr nat --input nat-session.jsonl
 ```
 
 Each report reads the saved file with `--input`. `explain` includes TC and

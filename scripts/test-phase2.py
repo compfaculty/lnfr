@@ -193,22 +193,22 @@ def verify_diagnoses(binary, path, expected):
 
 def main(binary, emit_client_jsonl=False):
     suffix = str(os.getpid())
-    client_ns = f"nfr2-client-{suffix}"
-    server_ns = f"nfr2-server-{suffix}"
+    client_ns = f"lnfr2-client-{suffix}"
+    server_ns = f"lnfr2-server-{suffix}"
     with ExitStack() as stack:
-        temp = Path(stack.enter_context(TemporaryDirectory(prefix="nfr-phase2-")))
+        temp = Path(stack.enter_context(TemporaryDirectory(prefix="lnfr-phase2-")))
         for namespace in (client_ns, server_ns):
             run("ip", "netns", "add", namespace)
             stack.callback(run, "ip", "netns", "del", namespace)
 
-        run("ip", "-n", client_ns, "link", "add", "nfr0", "type", "veth",
-            "peer", "name", "nfr0", "netns", server_ns)
+        run("ip", "-n", client_ns, "link", "add", "lnfr0", "type", "veth",
+            "peer", "name", "lnfr0", "netns", server_ns)
         for namespace, addr, addr6 in (
             (client_ns, CLIENT, CLIENT6), (server_ns, SERVER, SERVER6)
         ):
-            run("ip", "-n", namespace, "addr", "add", f"{addr}/30", "dev", "nfr0")
-            run("ip", "-n", namespace, "-6", "addr", "add", f"{addr6}/64", "dev", "nfr0", "nodad")
-            run("ip", "-n", namespace, "link", "set", "nfr0", "up")
+            run("ip", "-n", namespace, "addr", "add", f"{addr}/30", "dev", "lnfr0")
+            run("ip", "-n", namespace, "-6", "addr", "add", f"{addr6}/64", "dev", "lnfr0", "nodad")
+            run("ip", "-n", namespace, "link", "set", "lnfr0", "up")
 
         def capture(namespace):
             inode = os.stat(f"/run/netns/{namespace}").st_ino
@@ -232,7 +232,7 @@ def main(binary, emit_client_jsonl=False):
         wire_path, ready_path = temp / "wire.log", temp / "tcpdump.log"
         with wire_path.open("w") as output, ready_path.open("w") as diagnostic:
             wire = child(stack, ("ip", "netns", "exec", client_ns, "tcpdump", "--immediate-mode", "-nn", "-p", "-l",
-                                 "-i", "nfr0", "tcp"), stdout=output, stderr=diagnostic)
+                                 "-i", "lnfr0", "tcp"), stdout=output, stderr=diagnostic)
         wait_for(lambda: "listening on" in ready_path.read_text(), "tcpdump readiness", wire)
 
         def client(mode, local=CLIENT, remote=SERVER):
@@ -259,7 +259,7 @@ def main(binary, emit_client_jsonl=False):
         require(closed.wait(timeout=5) == 0, "N2 client failed")
 
         tc = ("ip", "netns", "exec", server_ns, "tc")
-        run(*tc, "qdisc", "add", "dev", "nfr0", "root", "netem", "loss", "100%")
+        run(*tc, "qdisc", "add", "dev", "lnfr0", "root", "netem", "loss", "100%")
         lossy_path, lossy = client("lossy")
         lossy_port = read_values(lossy_path, 1, lossy)[0]["local_port"]
         retransmit = wait_for(
@@ -268,18 +268,18 @@ def main(binary, emit_client_jsonl=False):
             "N3 client TCP retransmission",
             client_capture, lossy,
         )
-        qdisc = run(*tc, "-s", "qdisc", "show", "dev", "nfr0")
+        qdisc = run(*tc, "-s", "qdisc", "show", "dev", "lnfr0")
         require(re.search(r"dropped [1-9][0-9]*", qdisc), f"N3: netem reported no drops: {qdisc}")
-        run(*tc, "qdisc", "del", "dev", "nfr0", "root")
+        run(*tc, "qdisc", "del", "dev", "lnfr0", "root")
         require(read_values(lossy_path, 2, lossy)[1]["connected"], "N3 did not recover")
         require(lossy.wait(timeout=5) == 0, "N3 client failed")
 
-        run(*tc, "qdisc", "add", "dev", "nfr0", "root", "netem", "loss", "100%")
+        run(*tc, "qdisc", "add", "dev", "lnfr0", "root", "netem", "loss", "100%")
         timeout_path, timed = client("timeout")
         timed_result = read_values(timeout_path, 2, timed, seconds=18)
         require(timed_result[1]["errno"] == errno.ETIMEDOUT, timed_result)
         require(timed.wait(timeout=5) == 0, "N4 client failed")
-        run(*tc, "qdisc", "del", "dev", "nfr0", "root")
+        run(*tc, "qdisc", "del", "dev", "lnfr0", "root")
 
         ipv6_path, ipv6 = client("ipv6", CLIENT6, SERVER6)
         ipv6_result = read_values(ipv6_path, 2, ipv6)
@@ -342,12 +342,12 @@ if __name__ == "__main__":
     if os.geteuid() != 0:
         raise SystemExit("Run this fixture with sudo on the Kali test host.")
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("nfr_binary", nargs="?", default="target/debug/nfr")
+    parser.add_argument("lnfr_binary", nargs="?", default="target/debug/lnfr")
     parser.add_argument("--emit-client-jsonl", action="store_true",
                         help="write the verified client capture to stdout")
     options = parser.parse_args()
-    binary = Path(options.nfr_binary).resolve()
+    binary = Path(options.lnfr_binary).resolve()
     if not os.access(binary, os.X_OK):
-        raise SystemExit("Build nfr first: cargo build --locked")
+        raise SystemExit("Build lnfr first: cargo build --locked")
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
     main(str(binary), options.emit_client_jsonl)
