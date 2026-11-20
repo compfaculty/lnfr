@@ -1,84 +1,49 @@
-# Architecture and instrumentation strategy
+# Architecture
 
-## System layout
+## Data flow
 
-```text
-macOS / RustRover or JetBrains Client
-             │ SSH (private network)
-             ▼
-kali-z570 (Linux x86_64)
-  ├── cargo workspace
-  │   ├── crates/nfr-common     (schema, IDs, error types)
-  │   ├── crates/nfr-agent      (loader, ring buffer, event pipeline)
-  │   ├── crates/nfr-core       (correlator, flow state, evidence)
-  │   ├── crates/nfr-cli        (capture, inspect, doctor, export)
-  │   ├── crates/nfr-tui        (later; Ratatui)
-  │   └── bpf/                  (C + CO-RE, libbpf skeleton)
-  ├── Linux BPF verifier + maps + ring buffer
-  ├── Linux kernel socket/TCP/skb/netfilter/TC hooks
-  └── network namespace fixtures
-```
-
-Start with one executable CLI (`nfr`) and separate library crates only when interfaces are stable. Avoid premature microservice architecture.
-
-## Instrumentation phases
-
-1. **MVP:** socket connect/accept lifecycle (where hooks supported), TCP state transitions, retransmits, skb drop reasons, TCP/IP metadata. Prefer stable tracepoints; selectively use fentry/fexit (BTF) or kprobes with explicit kernel-version checks. Record PID/TGID, netns, cgroup, socket cookie where available, 5-tuple, interface index, timestamps. Beware not every event has all identifiers.
-2. **Networking:** netfilter hooks / conntrack events and NAT original/reply tuples, TC ingress/egress metadata, bridge forwarding, route-relevant tracepoints. Implement isolated adapters per hook family. Avoid kernel-private structure assumptions; use CO-RE and graceful feature gating.
-3. **Advanced:** optional packet-path mode for *selected* flows, QoS queueing, detailed TCP RTT/RTO/cwnd metrics, VRF/veth/VXLAN and containers. High-overhead features must be opt-in.
-
-## Event schema (versioned)
+`nfr` is a single Rust executable for x86-64 Linux. The build compiles the C
+CO-RE probes in [bpf/nfr.bpf.c](../bpf/nfr.bpf.c) and generates a Rust
+skeleton with `libbpf-cargo`.
 
 ```text
-EventHeader { schema_version, kind, monotonic_ns, cpu, source_id, flags }
-FlowIdentity { netns_cookie?, socket_cookie?, pid_tgid?, cgroup_id?,
-               l3_proto?, l4_proto?, src_ip?, src_port?, dst_ip?, dst_port?,
-               ifindex?, direction? }
-Observation { hook, action, kernel_reason?, tcp_state?, skb_len?,
-              conntrack_zone?, observed_tuple?, original_tuple?,
-              data_quality, payload_specific }
+Kernel hooks → BPF ring buffer ───┐
+                                 ├→ capture → JSONL → flow reports / saved TUI
+Conntrack notifications (opt-in) ┘                  ↘ live TCP TUI
 ```
 
-`?` means field can be absent. Identifiers are scoped and may change across NAT or skb clones. Version event schema and BPF/userspace compatibility. Endianness and IPv4/IPv6 representation must be specified and tested.
+[The collector](../src/capture.rs) uses `libbpf-rs` to load and attach
+the probes. [Event decoding](../src/event.rs) normalizes the fixed-size
+binary records. [Flow analysis](../src/flows.rs) indexes the JSONL and
+builds evidence-backed reports. [The Ratatui viewer](../src/tui.rs)
+uses the same analysis for saved files and for the live collector's
+rolling TCP window.
 
-## Correlation and evidence
+## Event format, clocks, and bounds
 
-- **Flow-level correlation:** prefer socket cookie + netns; supplement with 5-tuple, process/cgroup, time window; preserve NAT tuple transformations and confidence.
-- **Packet-level correlation:** optional bounded skb pointer/identity within a short observational window; pointer reuse and cloning invalidate global uniqueness. A 5-tuple is *not* a packet identifier. TCP sequence/ACK plus timestamps can help but are imperfect under GSO/GRO and retransmission.
-- **Drop observability:** `skb:kfree_skb` or comparable hooks if supported. A drop event is evidence of a local kernel drop, not necessarily the root cause. Not all drops are observed through this hook.
-- **Negative evidence:** absence of downstream event must produce `unknown/not observed`, not `dropped here`.
-- **Explanations:** deterministic rules first, with evidence IDs, timestamps, alternate hypotheses and confidence (confirmed / probable / possible / unknown). AI explanation is optional and cannot create new evidence.
+The collector emits versioned JSONL, starting with probe availability
+and filter settings and ending with delivery and loss counters. The BPF
+ring's V2 records are 128 bytes. Socket records can include IPv4 or IPv6
+endpoints, socket namespace inode, socket cookie when present, and
+execution-context task and cgroup IDs. Optional hooks carry their own
+metadata in the same binary record layout. Saved analysis also accepts
+legacy V1 socket state records, which contain fewer fields.
 
-## Data pipeline
+BPF hooks use `bpf_ktime_get_ns`. The collector samples realtime between
+two monotonic readings and records the calibration and its sampling
+uncertainty in the header. Clock steps or drift can increase the error in
+estimated wall time. Conntrack events use monotonic time at userspace
+receipt. Use monotonic timestamps to order observations within a capture.
 
-BPF hooks -> bounded maps / ring buffer -> Rust collector -> normalization -> bounded correlator -> JSONL (optional SQLite later) -> CLI/TUI report.
+BPF observers share a 256 KiB ring and a limit of 256 reservation attempts
+per CPU per monotonic second. A per-CPU map stores one 48-byte counter value
+per possible CPU, excluding kernel allocation overhead. The collector
+reports failed reservations separately from deliberate rate limiting.
+Timed and signal-driven stops detach the unpinned links before draining
+the ring and reading the counters. The live viewer bounds recent event
+data to 4,096 records or 2 MiB and reports history eviction as a gap.
 
-Report ringbuf reservation failures / lost events through BPF map counters. Include feature availability and sampling rates with every capture session. Capture may be partial or biased under load. Use timeout and cancellation-safe cleanup.
-
-### Phase 1 baseline
-
-The sole attach point is `sock:inet_sock_set_state`. CO-RE relocates the
-tracepoint's `protocol`, `family`, `oldstate`, and `newstate` fields against kernel
-BTF. The probe filters for TCP and records state transitions, CPU, and the
-current task's TGID, TID, and cgroup ID. The payload is a fixed 40-byte V1
-little-endian record. It contains no socket addresses, kernel pointers, or
-packet payloads. There is no alternate attach point for this phase.
-
-The probe caps reservation attempts at 256 per CPU per monotonic second. The
-ring has a fixed 256 KiB capacity, and the counter array uses one 40-byte value
-per possible CPU, excluding kernel allocation overhead. Rust decodes one
-sample at a time and writes it to stdout. Rate-limited events and failed ring
-reservations are counted separately. The summary reports userspace receipt and
-elapsed time. CPU and latency overhead have yet to be measured.
-
-Kernel timestamps come from `bpf_ktime_get_ns`; use them to order observations.
-Estimated wall time uses a realtime sample bracketed by two monotonic readings.
-The capture header carries that calibration and its sampling uncertainty.
-Wall-clock steps or drift during capture can add error beyond that uncertainty.
-At timeout or on SIGINT/SIGTERM, userspace releases the unpinned link before
-draining the ring and reading counters.
-
-### Phase 2 TCP lifecycle
+## TCP lifecycle
 
 | Hook | Observation and requirements |
 |---|---|
@@ -92,22 +57,18 @@ is 128 bytes, including IPv4/IPv6 address bytes and host-normalized ports,
 socket network namespace inode, and the configured bound interface index when
 available. CO-RE reads these fields from the hook's socket. An existing kernel
 socket cookie is exposed when nonzero. The capture does not allocate a cookie,
-and a namespace plus tuple can be reused. Wall and monotonic timestamps retain
-the Phase 1 semantics.
+and a namespace plus tuple can be reused. Timestamps use the clock calibration
+described above.
 
-When optional metadata is absent or an optional attach fails, the capture
+When an optional TCP hook is unavailable or its attach fails, the capture
 header records the affected probe and reason. If a combined load fails, retry
 with `--state-only` to isolate the required tracepoint. Unpinned links are
 released before the ring drains. Failed connect timing-map insertions are
 counted separately, and unmatched results have no elapsed time. The BPF hot
 path performs bounded lookups and copies; the shared rate limiter bounds event
-volume while the timing map bounds in-flight connect tracking. CPU and latency
-overhead have yet to be measured.
+volume while the timing map bounds in-flight connect tracking.
 
-Phase 2 observes connection lifecycle and retransmits. It has no local drop
-probe and draws no conclusions about where packets were lost.
-
-### Phase 3 flow timelines and diagnoses
+## Flow timelines and diagnoses
 
 Analysis reads one saved JSONL capture and sorts events by monotonic timestamp,
 using input line number to break ties. Evidence IDs refer to original input
@@ -136,7 +97,7 @@ Offline analysis is bounded to 100,000 events, 64 MiB of input, and 16 KiB per
 line. Malformed records fail with the input line number. Missing start or end
 records are reported as capture gaps.
 
-### Phase 4 conntrack and NAT
+## Conntrack and NAT
 
 The optional adapter subscribes to ctnetlink NEW, UPDATE, and DESTROY
 multicast notifications in the capture process's namespace. It retains TCP
@@ -160,7 +121,7 @@ datagrams, decode errors, and its separate rate-limit count. Closing the file
 descriptor releases the subscription. If the optional subscription cannot be
 opened, a normal capture remains available with `--conntrack` omitted.
 
-### Phase 4 TC ingress and egress
+## TC ingress and egress
 
 `--tc-interface` loads `tcx/ingress` and `tcx/egress` on one interface in the
 capture process's network namespace. The selected device is resolved to an
@@ -185,7 +146,7 @@ same namespace and within 250 ms of the flow's observed interval. Reports
 withhold those associations when another matching flow has an overlapping
 window. Receipt at a hook gives no proof of delivery or loss location.
 
-### Phase 4 bridge forwarding
+## Bridge forwarding
 
 `--bridge-interface` enables the `fentry/__br_forward` probe. On Kali the hook
 uses split BTF from the loaded bridge module. CO-RE reads the bridge and output
@@ -205,7 +166,7 @@ Bridge events share the bounded BPF ring and per-CPU rate limit. The
 unpinned link detaches before the ring drains. If bridge BTF or tracing
 support is unavailable, omit `--bridge-interface` to run a socket capture.
 
-### Phase 4 routing
+## IP forwarding
 
 `--routing` enables `fentry/ip_forward` and `fentry/ip6_forward` when their
 signatures are present in kernel BTF. CO-RE resolves the input device and
@@ -228,21 +189,17 @@ unpinned links before draining the ring. `doctor` reports which BTF signatures
 are present, and capture reports disabled hooks. Omit `--routing` if the
 forwarding probes cannot load.
 
-## Security and operational limits
+## Coverage and operational limits
 
-- Default read-only observation; no packet capture payload, packet mutation or enforcement.
-- Root/CAP_BPF/CAP_PERFMON/CAP_NET_ADMIN requirements vary with kernel and hook; discover rather than assuming a universal capability set.
-- Do not set permanent unrestricted capabilities or disable host security mechanisms for convenience.
-- Bound event rate, ring buffer, per-flow state count and retention. Allow filters by PID, netns, interface, cgroup and tuple.
-- Default no remote telemetry; local files only, redact source/destination addresses in exports when requested.
+NFR records headers and metadata, including information that can identify
+hosts and workloads. Capture writes to stdout. Saved files and retention
+are managed by the caller. The probes leave packets and forwarding
+decisions untouched.
 
-## Initial CLI UX
-
-```bash
-nfr doctor
-nfr capture --duration 30s --tcp --output session.jsonl
-nfr flows --input session.jsonl
-nfr explain --input session.jsonl --flow <flow-id>
-```
-
-`doctor` prints hook support and privileges. `capture` must not imply all stages are covered; print `active-probes` and `blind-spots`.
+The capture observes specific hooks on one Linux host. Packet payloads,
+local drop reasons, and the complete path of a packet are outside its
+coverage. Cloning, offload, recirculation, tuple reuse, and missing records
+can make associations ambiguous. A missing event leaves the activity
+unobserved. See the [user guide](USER_GUIDE.md#troubleshoot-capture-and-coverage)
+for privilege and coverage checks and [verification](TEST_PLAN.md) for
+reproducible fixture and overhead measurement commands.
