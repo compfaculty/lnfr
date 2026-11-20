@@ -50,6 +50,13 @@ In the viewer, use **↑/↓** to select a flow or evidence row and **Tab** or
 diagnoses and their evidence IDs, and **c** shows coverage, gaps, and blind
 spots. Use the arrow keys to scroll the detail pane.
 
+In live and saved views, **First UTC** shows the estimated time of the
+earliest socket event currently recorded for each flow. A leading `~` marks
+the estimate, and a blank cell means the event has no calibrated wall time.
+Clock steps or drift can affect the estimate. In live mode, this time can
+move forward as older events leave the rolling window. The evidence timeline
+uses monotonic elapsed time.
+
 For command-line analysis, list the flows, then enter one of the reported IDs
 from the same file.
 

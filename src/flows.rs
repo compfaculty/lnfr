@@ -571,6 +571,11 @@ impl Review {
         self.flows.iter().map(|flow| flow.summarize(&self.session))
     }
 
+    pub(crate) fn first_estimated_wall_ns(&self, index: usize) -> Option<u64> {
+        let first = *self.flows.get(index)?.evidence.first()?;
+        self.session.events[first].raw["estimated_wall_ns"].as_u64()
+    }
+
     pub fn active_probes(&self) -> &[String] {
         &self.session.active_probes
     }

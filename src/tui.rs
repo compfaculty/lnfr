@@ -537,9 +537,9 @@ impl<'a> App<'a> {
             ]),
             head,
         );
-        let (flows, timeline, details) = if body.width >= 100 {
+        let (flows, timeline, details) = if body.width >= 120 {
             let [flows, right] =
-                Layout::horizontal([Constraint::Percentage(48), Constraint::Fill(1)]).areas(body);
+                Layout::horizontal([Constraint::Percentage(52), Constraint::Fill(1)]).areas(body);
             let [timeline, details] =
                 Layout::vertical([Constraint::Percentage(52), Constraint::Fill(1)]).areas(right);
             (flows, timeline, details)
@@ -587,10 +587,13 @@ impl<'a> App<'a> {
         let window = self
             .flow
             .visible(self.flows.len(), usize::from(area.height.saturating_sub(3)));
-        let rows = self.flows[window.clone()].iter().map(|(_, flow)| {
+        let rows = self.flows[window.clone()].iter().map(|(index, flow)| {
             let (local, peer) = endpoints(flow);
             Row::new([
                 flow.flow_id.clone(),
+                self.review
+                    .first_estimated_wall_ns(*index)
+                    .map_or_else(String::new, estimated_utc_time),
                 local,
                 peer,
                 flow.event_count.to_string(),
@@ -600,12 +603,13 @@ impl<'a> App<'a> {
             rows,
             [
                 Constraint::Length(9),
+                Constraint::Length(9),
                 Constraint::Fill(1),
                 Constraint::Fill(1),
                 Constraint::Length(4),
             ],
         )
-        .header(table_header(["Flow", "Local", "Peer", "TCP"]))
+        .header(table_header(["Flow", "First UTC", "Local", "Peer", "TCP"]))
         .block(block)
         .style(Style::new().fg(TEXT))
         .highlight_symbol("▸ ")
@@ -743,6 +747,14 @@ fn endpoints(flow: &FlowSummary) -> (String, String) {
             ),
         )
     }
+}
+
+fn estimated_utc_time(ns: u64) -> String {
+    let seconds = (ns / 1_000_000_000) % 86_400;
+    let hours = seconds / 3_600;
+    let minutes = (seconds / 60) % 60;
+    let seconds = seconds % 60;
+    format!("~{hours:02}:{minutes:02}:{seconds:02}")
 }
 
 fn relative_time(ns: u64) -> String {
@@ -901,8 +913,8 @@ mod tests {
     use ratatui::{Terminal, backend::TestBackend};
 
     const CAPTURE: &[u8] = br#"{"record":"capture_start","schema_version":2,"active_probes":["sock:inet_sock_set_state"],"disabled_probes":{"tcp:tcp_retransmit_skb":"fixture unavailable"}}
-{"record":"socket_state","schema_version":2,"hook":"sock:inet_sock_set_state","monotonic_ns":10,"netns_inum":11,"oldstate":7,"newstate":2,"local":{"address":"192.0.2.1","port":40000},"remote":{"address":"192.0.2.2","port":8080}}
-{"record":"tcp_connect","schema_version":2,"hook":"fexit/inet_stream_connect","monotonic_ns":20,"netns_inum":11,"result":0,"local":{"address":"192.0.2.1","port":40000},"remote":{"address":"192.0.2.2","port":8080}}
+{"record":"socket_state","schema_version":2,"hook":"sock:inet_sock_set_state","monotonic_ns":10,"estimated_wall_ns":97445000000000,"netns_inum":11,"oldstate":7,"newstate":2,"local":{"address":"192.0.2.1","port":40000},"remote":{"address":"192.0.2.2","port":8080}}
+{"record":"tcp_connect","schema_version":2,"hook":"fexit/inet_stream_connect","monotonic_ns":20,"estimated_wall_ns":97446000000000,"netns_inum":11,"result":0,"local":{"address":"192.0.2.1","port":40000},"remote":{"address":"192.0.2.2","port":8080}}
 {"record":"tcp_connect","schema_version":2,"hook":"fexit/inet_stream_connect","monotonic_ns":30,"netns_inum":11,"result":-111,"requested_peer":{"address":"192.0.2.2","port":9000}}
 {"record":"capture_end","schema_version":2,"received":3,"stats":{"submitted":3,"ring_lost":2,"rate_limited":0}}"#;
 
@@ -938,6 +950,29 @@ mod tests {
             "2 capture gaps",
         ] {
             assert!(first.contains(label), "{label} missing from {first}");
+        }
+
+        for width in [78, 124] {
+            let view = screen(&mut app, width, 36);
+            let mut lines = view.lines();
+            let header = lines.find(|line| line.contains("First UTC")).unwrap();
+            let time_start = header.find("First UTC").unwrap();
+            // The border and selection marker occupy more bytes than terminal cells.
+            let time_column = header[..time_start].chars().count();
+            let first_flow = lines.next().unwrap();
+            let second_flow = lines.next().unwrap();
+            assert!(first_flow.contains("flow-2"));
+            assert!(first_flow.contains("~03:04:05"));
+            assert!(first_flow.contains("192.0.2.1:40000"));
+            assert!(second_flow.contains("flow-4"));
+            assert_eq!(
+                second_flow
+                    .chars()
+                    .skip(time_column)
+                    .take(9)
+                    .collect::<String>(),
+                "         "
+            );
         }
 
         press(&mut app, KeyCode::Tab);
@@ -991,7 +1026,12 @@ mod tests {
 
         let after = Review::from_live_window(CAPTURE, 0).unwrap();
         let mut app = App::for_source(&after, "Live TCP".to_owned(), true, Some(view));
-        assert!(screen(&mut app, 124, 36).contains("Reviewing"));
+        let view = screen(&mut app, 124, 36);
+        assert!(view.contains("Reviewing"));
+        assert!(
+            view.lines()
+                .any(|line| line.contains("flow-2") && line.contains("~03:04:05"))
+        );
         assert_eq!(app.timeline[app.evidence.selected].id, "line-2");
         press(&mut app, KeyCode::Char('f'));
         assert!(screen(&mut app, 124, 36).contains("Following"));
