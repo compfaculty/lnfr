@@ -1,0 +1,4 @@
+/target/
+/.idea/
+/*.jsonl
+.DS_Store
