@@ -198,6 +198,12 @@ Check **c** for capture coverage and **q** for a clean return to the shell.
 Ratatui test-backend checks also exercise resizing, empty captures,
 selection, and detail views without privileges.
 
+Select a flow with a short timeline and check that the timeline uses only
+the rows it needs. Shrink the terminal and check that the selected evidence
+stays visible and **End** reaches the bottom of the focused event pane.
+A replay of the saved TCP retransmit capture on `kali-z570` displayed a
+four-row timeline and all 25 event JSON lines at 126×40 and 78×42.
+
 Compare **First UTC** with the earliest socket event's `estimated_wall_ns`
 converted to UTC and truncated to seconds. Check the flow table in both a
 wide and a narrow terminal. A replay of a saved TCP retransmit capture from

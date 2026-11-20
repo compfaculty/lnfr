@@ -48,7 +48,8 @@ collector detach, drain the ring, and write its summary.
 In the viewer, use **↑/↓** to select a flow or evidence row and **Tab** or
 **Enter** to move between panes. **e** shows the original event, **d** shows
 diagnoses and their evidence IDs, and **c** shows coverage, gaps, and blind
-spots. Use the arrow keys to scroll the detail pane.
+spots. Short timelines leave more room for the details below them. When the
+details exceed the pane, focus it and use the arrow keys to scroll.
 
 The **Flow** column shows the numeric part of the ID. The evidence timeline
 heading shows the full ID, such as `flow-360`, for use with `lnfr explain`.

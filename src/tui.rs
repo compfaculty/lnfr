@@ -537,21 +537,42 @@ impl<'a> App<'a> {
             ]),
             head,
         );
-        let (flows, timeline, details) = if body.width >= 120 {
+        // Keep room for a border, a header, and at least one selectable row.
+        let min_table_height = 4;
+        let height = usize::from(body.height);
+        let table_budget = height.saturating_sub(self.detail_lines.len() + 2);
+        let wide = body.width >= 120;
+        let (flows, evidence) = if wide {
             let [flows, right] =
                 Layout::horizontal([Constraint::Percentage(52), Constraint::Fill(1)]).areas(body);
-            let [timeline, details] =
-                Layout::vertical([Constraint::Percentage(52), Constraint::Fill(1)]).areas(right);
-            (flows, timeline, details)
+            (flows, right)
         } else {
-            let [flows, timeline, details] = Layout::vertical([
-                Constraint::Percentage(34),
-                Constraint::Percentage(32),
-                Constraint::Fill(1),
-            ])
-            .areas(body);
-            (flows, timeline, details)
+            let flow_height = (self.flows.len() + 3)
+                .clamp(min_table_height, (height / 3).max(min_table_height))
+                .min(
+                    table_budget
+                        .saturating_sub(min_table_height)
+                        .max(min_table_height),
+                );
+            let [flows, below] =
+                Layout::vertical([Constraint::Length(flow_height as u16), Constraint::Fill(1)])
+                    .areas(body);
+            (flows, below)
         };
+        let available_for_timeline = if wide {
+            table_budget
+        } else {
+            table_budget.saturating_sub(usize::from(flows.height))
+        };
+        let timeline_limit = if wide { height / 2 } else { height / 3 };
+        let timeline_height = (self.timeline.len() + 3)
+            .clamp(min_table_height, timeline_limit.max(min_table_height))
+            .min(available_for_timeline.max(min_table_height));
+        let [timeline, details] = Layout::vertical([
+            Constraint::Length(timeline_height as u16),
+            Constraint::Fill(1),
+        ])
+        .areas(evidence);
         self.render_flows(frame, flows);
         self.render_timeline(frame, timeline);
         self.render_details(frame, details);
@@ -997,6 +1018,40 @@ mod tests {
         ] {
             assert!(coverage.contains(label), "{label} missing from {coverage}");
         }
+    }
+
+    #[test]
+    fn fits_event_details_below_short_timeline_and_scrolls_after_resize() {
+        let capture = Review::from_jsonl(CAPTURE).unwrap();
+        let mut app = App::new(&capture, Path::new("example.jsonl"));
+        press(&mut app, KeyCode::Tab);
+        press(&mut app, KeyCode::Down);
+        press(&mut app, KeyCode::Enter);
+
+        for width in [78, 124] {
+            let view = screen(&mut app, width, 36);
+            let timeline = view
+                .lines()
+                .position(|line| line.contains("Evidence timeline"))
+                .unwrap();
+            let details = view
+                .lines()
+                .position(|line| line.contains("Event · line-3"))
+                .unwrap();
+            assert_eq!(details - timeline, 5);
+            assert!(app.detail_height >= app.detail_lines.len());
+            assert!(view.contains(r#""schema_version": 2"#));
+        }
+
+        let short = screen(&mut app, 78, 14);
+        assert!(short.contains("TCP connect succeeded"));
+        assert!(short.contains("Event · line-3"));
+        assert!(app.detail_height < app.detail_lines.len());
+        press(&mut app, KeyCode::End);
+        let scrolled = screen(&mut app, 78, 14);
+        assert!(scrolled.lines().any(|line| line.starts_with("│}")));
+        screen(&mut app, 78, 36);
+        assert_eq!(app.detail_scroll.0, 0);
     }
 
     #[test]
